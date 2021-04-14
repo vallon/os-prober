@@ -8,6 +8,36 @@ require_tmpdir
 
 grep "^/dev/" /proc/mounts | parse_proc_mounts >"$OS_PROBER_TMP/mounted-map" || true
 
+if [ "$1" = "btrfs" ] ; then
+    type=btrfs
+    fs_uuid=$2
+    subvol=$3
+    if [ -z "$fs_uuid" -o -z "$subvol" ] ; then
+	echo "usage: linux-boot-prober btrfs fs_uuid subvol" >&2
+	exit 1
+    fi
+    debug "linux-boot-prober $type $fs_uuid $subvol"
+
+    partition=$( blkid --uuid "$fs_uuid" )
+    if [ -z "$partition" ] ; then
+	exit 1
+    fi
+
+    root=$(cut -d ' ' -f 4,5,9 /proc/self/mountinfo | sed -ne 's@^/ \(.*\) btrfs@\1@p')
+    if [ "$root" ] ; then
+	test=/usr/lib/linux-boot-probes/mounted/40grub2
+	bootpart="$partition"
+	if [ -f "$test" -a -x "$test" ] ; then
+	    if $test "$partition" "$bootpart" "$root$subvol" "$type" ; then
+		debug "$test succeeded"
+		exit 0
+	    fi
+	fi
+    fi
+    
+    exit 1
+fi
+
 partition="$1"
 
 if [ -z "$partition" ]; then

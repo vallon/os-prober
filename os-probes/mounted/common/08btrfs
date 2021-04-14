@@ -1,0 +1,120 @@
+#!/bin/sh
+# Handle scanning of btrfs filesystems
+
+. /usr/share/os-prober/common.sh
+
+partition="$1"
+mpoint="$2"
+type="$3"
+
+case "$type" in
+    (btrfs)
+	debug "Scanning $type filesystem at $mpoint" ;;
+    (*)
+	exit 1 ;;
+esac
+
+fs_uuid=
+get_fs_uuid () {
+    if [ -z "$fs_uuid" ] ; then
+	fs_uuid=$( blkid -o value -s UUID "$partition" )
+	if [ -z "$fs_uuid" ] ; then
+	    debug "Failed to find UUID of $partition"
+	    exit 1
+	fi
+    fi
+}
+
+path_is_root_of_filesystem () {
+    local path=$1
+    local fspath
+    fspath=$(btrfs subvolume show "$path" | head -n 1)
+    [ "$fspath" = "/" ]
+}
+
+find_root () {
+    root=
+
+    # Check with btrfs before searching for mounts
+    if path_is_root_of_filesystem "$mpoint" ; then
+	root="$mount_mp"
+	return 0
+    fi
+
+    while read mount_dev mount_mp _rest ; do
+	debug "find_root $mount_dev $mount_cp"
+	if [ "$mount_dev" = "$partition" ] ; then
+	    if path_is_root_of_filesystem "$mount_mp" ; then
+		root=$mount_mp
+		return 0
+	    fi
+	fi
+    done < /proc/mounts
+    return 1
+}
+
+no_loop () {
+    if [ "$OSPROBE_08BTRFS_LOOP" ] ; then
+	debug "failed to find root after mount"
+	exit 1
+    fi
+    OSPROBE_08BTRFS_LOOP=1 "$@"
+}
+
+list_subvolumes () {
+    echo "/"
+    btrfs subvolume list -a "$mpoint" |
+	sed -ne 's/^.* path //p' |
+	sed -e 's@^<FS_TREE>/@@' |
+	while read p ; do
+	    echo "/$p"
+	done
+}
+
+is_subvol_rw () {
+    local path=$1
+    [ "$( btrfs property get "$path" ro )" = "ro=false" ]
+}
+
+get_subvol_uuid () {
+    local path=$1
+    btrfs subvolume show "$path" | sed -ne 's/^\s*UUID:\s\s*//p'
+}
+
+run_tests () {
+    local path=$1
+    local subvol=$2
+    if is_subvol_rw "$path" ; then
+	debug "Found rw subvolume $subvol at $path"
+	for x in /usr/lib/os-probes/mounted/* ; do
+	    if [ -f "$x" -a -x "$x" -a "$x" != "/usr/lib/os-probes/mounted/08btrfs" ] ; then
+		if out=$( "$x" "$partition" "$path" "$type" ) ; then
+		    debug "found bootable btrfs subvolume $path"
+
+		    get_fs_uuid
+		    echo "$out:btrfs:$fs_uuid:$subvol"
+		    
+		    break
+		fi
+	    fi
+	done
+    fi
+}
+
+search_root () {
+    # Call the mounted tests for root volume and each subvolume
+    list_subvolumes |
+	while read subvol ; do
+	    run_tests "$mpoint$subvol" "$subvol"
+	done
+}
+
+if find_root ; then
+    debug "found btrfs root $root"
+
+    search_root
+    exit 0
+fi
+
+exit 0
+
