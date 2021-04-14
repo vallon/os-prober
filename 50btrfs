@@ -1,0 +1,66 @@
+#!/bin/bash
+
+device="$1"
+mount="$2"
+type="$3"
+
+if [ "$type" != btrfs ] ; then
+   exit 1
+fi
+
+mounts=()
+
+while read proc_dev proc_mp proc_type proc_opt rest ; do
+    if [ "$proc_dev" = "$device" ] ; then
+	if [ "$proc_type" = btrfs ] ; then
+	    case "$proc_opt" in
+		(*,subvol=/|*,subvol=/,*)
+		    rootmount="$proc_mp"
+		    break
+	    esac
+	fi
+    fi
+done < /proc/mounts
+
+check_partition () {
+    local uuid="$1"
+    local subvol="$2"
+    local path="$3"
+    test="$(dirname $0)/90linux-distro"
+    if [ -x "$test" ] ; then
+	if out="$( "$test" "$device" "$path" "$type" )" ; then
+	    echo "Found btrfs on device $device uuid $uuid subvol $subvol path $path out $out" >&2
+	    echo "$out:btrfs:$uuid:$subvol"
+	    return 0
+	fi
+    fi
+    return 1
+}
+
+walk_subvolumes () {
+    local m="$1"
+    local subvols
+    local ret=1
+
+    local uuid
+    uuid="$(btrfs filesystem show $path | sed -ne 's/.* uuid: //p')"
+    if [ -z "$uuid" ] ; then
+	return $ret
+    fi
+
+    subvols="$(btrfs subvolume list $1 | sed -e 's/.*path //')"
+    for subvol in $subvols ; do
+	check_partition "$uuid" "$subvol" "$m/$subvol" && ret=0
+    done
+
+    return $ret
+}
+
+if [ "$rootmount" ] ; then
+    echo "Found root mountpoint of $device at $rootmount" >&2
+    walk_subvolumes "$rootmount"
+    exit
+fi
+
+exit 1
+# echo "$device:$longname:$label:$boot:btrfs:$uuid:$subvol"
