@@ -6,6 +6,11 @@ partition="$1"
 bootpart="$2"
 mpoint="$3"
 type="$4"
+if [ "$type" = btrfs ] ; then
+    subdir="/$5"
+else
+    subdir=
+fi
 
 found_item=0
 
@@ -93,14 +98,15 @@ parse_grub_menu () {
 	entry_result
 }
 
-if [ -e "$mpoint/boot/grub/grub.cfg" ] && \
-   ([ ! -e "$mpoint/boot/grub/menu.lst" ] || \
-    [ "$mpoint/boot/grub/grub.cfg" -nt "$mpoint/boot/grub/menu.lst" ]); then
+boot=$mpoint$subdir/boot
+if [ -e "$boot/grub/grub.cfg" ] && \
+   ([ ! -e "$boot/grub/menu.lst" ] || \
+    [ "$boot/grub/grub.cfg" -nt "$boot/grub/menu.lst" ]); then
 	debug "parsing grub.cfg"
-	parse_grub_menu "$mpoint" "$partition" "$bootpart" < "$mpoint/boot/grub/grub.cfg"
-elif [ -e "$mpoint/boot/grub2/grub.cfg" ]; then
+	parse_grub_menu "$mpoint" "$partition" "$bootpart" < "$boot/grub/grub.cfg"
+elif [ -e "$boot/grub2/grub.cfg" ]; then
 	debug "parsing grub.cfg"
-	parse_grub_menu "$mpoint" "$partition" "$bootpart" < "$mpoint/boot/grub2/grub.cfg"
+	parse_grub_menu "$mpoint" "$partition" "$bootpart" < "$boot/grub2/grub.cfg"
 fi
 
 if [ "$found_item" = 0 ]; then

@@ -28,7 +28,7 @@ if [ "$1" = "btrfs" ] ; then
 	test=/usr/lib/linux-boot-probes/mounted/40grub2
 	bootpart="$partition"
 	if [ -f "$test" -a -x "$test" ] ; then
-	    if $test "$partition" "$bootpart" "$root$subvol" "$type" ; then
+	    if $test "$partition" "$bootpart" "$root" "$type" "$subvol" ; then
 		debug "$test succeeded"
 		exit 0
 	    fi
