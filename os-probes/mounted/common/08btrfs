@@ -37,7 +37,7 @@ find_root () {
 
     # Check with btrfs before searching for mounts
     if path_is_root_of_filesystem "$mpoint" ; then
-	root="$mount_mp"
+	root="$mpoint"
 	return 0
     fi
 
