@@ -105,7 +105,7 @@ search_root () {
     # Call the mounted tests for root volume and each subvolume
     list_subvolumes |
 	while read subvol ; do
-	    run_tests "$mpoint$subvol" "$subvol"
+	    run_tests "$root$subvol" "$subvol"
 	done
 }
 
